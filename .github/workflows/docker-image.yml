@@ -1,0 +1,26 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+    - uses: actions/checkout@v4
+    - name: Run Prisma Cloud Scan
+      id: prisma-cloud
+      uses: bridgecrewio/checkov-action@master
+      env:
+        PRISMA_API_URL: https://api.jp.prismacloud.io
+      with:
+        api-key: ${{ secrets.BC_API_KEY }}
+    - name: Build the Docker image
+      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
