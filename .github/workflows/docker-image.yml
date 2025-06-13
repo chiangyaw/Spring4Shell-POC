@@ -55,5 +55,6 @@ jobs:
     #   with:
     #     api-key: ${{ secrets.BC_API_KEY }}
     #     use_enforcement_rules: true
+    # Test
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
