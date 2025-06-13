@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [ "master" ]
 permissions: read-all
+
+env:
+  CORTEX_API_KEY: ${{secrets.CORTEX_API_KEY}}
+  CORTEX_API_KEY_ID: ${{secrets.CORTEX_API_KEY_ID}}
+  CORTEX_API_URL: https://api-japac-ccr.xdr.jp.paloaltonetworks.com
+  CORTEX_CLI_VERSION: 0.11.0
+
 jobs:
 
   build:
@@ -15,13 +22,38 @@ jobs:
     steps:
     - name: Checkout repo
       uses: actions/checkout@v4
-    - name: Run Prisma Cloud Scan
-      id: prisma-cloud
-      uses: bridgecrewio/checkov-action@master
-      env:
-        PRISMA_API_URL: https://api.jp.prismacloud.io
-      with:
-        api-key: ${{ secrets.BC_API_KEY }}
-        use_enforcement_rules: true
+    - name: Get Temporary Token
+      run: |
+        TOKEN_RESPONSE=$(curl --location "${CORTEX_API_URL}/public_api/v1/unified-cli/image/token" \
+          --header "Authorization: ${CORTEX_API_KEY}" \
+          --header "x-xdr-auth-id: ${CORTEX_API_KEY_ID}" \
+          --header 'Content-Type: application/json' \
+          --data '{}')
+        TEMP_TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.token')
+        echo "TEMP_TOKEN=$TEMP_TOKEN" >> $GITHUB_ENV
+    - name: Pull Docker Image
+      run: |
+        docker pull distributions.traps.paloaltonetworks.com/cli-docker/${{env.TEMP_TOKEN}}/method:amd64-${{env.CORTEX_CLI_VERSION}}
+        docker tag distributions.traps.paloaltonetworks.com/cli-docker/${{env.TEMP_TOKEN}}/method:amd64-${{env.CORTEX_CLI_VERSION}} cortexcli:${{env.CORTEX_CLI_VERSION}}
+    - name: Run Docker Container
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/home/code cortexcli:${{ env.CORTEX_CLI_VERSION }} \
+          --api-base-url ${CORTEX_API_URL} \
+          --api-key ${CORTEX_API_KEY} \
+          --api-key-id ${CORTEX_API_KEY_ID} \
+          code scan \
+          --directory /home/code \
+          --repo-id ${{github.repository}} \
+          --branch ${{github.ref_name}} \
+          --source 'GITHUB_ACTIONS' \
+          --create-repo-if-missing
+    # - name: Run Prisma Cloud Scan
+    #   id: prisma-cloud
+    #   uses: bridgecrewio/checkov-action@master
+    #   env:
+    #     PRISMA_API_URL: https://api.jp.prismacloud.io
+    #   with:
+    #     api-key: ${{ secrets.BC_API_KEY }}
+    #     use_enforcement_rules: true
     - name: Build the Docker image
       run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
